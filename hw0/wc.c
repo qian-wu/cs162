@@ -5,7 +5,7 @@
 int countWords(char *line) {
 	static char array[255];
 	char *buff = array;
-	char *end;
+	char prev;
 	int c = 0, i = 0;
 	int len = strlen(line);
 
@@ -16,11 +16,11 @@ int countWords(char *line) {
 	}
 
 	while (i < len) {
-		if (*line == ' ') {
+		if (i > 0 && *line == ' ' && prev != ' ') {
 			c++;
-			// printf("-");
 		}
 		// printf("%c", *line);
+		prev = *line;
 		line++;
 		i++;
 	}
@@ -38,17 +38,13 @@ int main(int argc, char *argv[]) {
 	char *line;
 	size_t len = 0;
 	size_t read;
+	char *file;
 
-	if (argc < 2) {
-		printf("usage : %s <file name>", argv[0]);
-	}
-
-	char *file = argv[1];
+	file = argv[1];
 	fp = fopen(file, "r");
 
-	if (!file) {
-		printf("can not open file %s", file);
-		exit(1);
+	if (!fp) {
+		fp = stdin;
 	}
 
 	while ((read = getline(&line, &len, fp)) != -1) {
