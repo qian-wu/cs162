@@ -49,13 +49,13 @@ int main(int argc, char *argv[]) {
 
 	while ((read = getline(&line, &len, fp)) != -1) {
 		word_count += countWords(line);
-		printf("read line %d words %d bytes %zu: %s", line_count, word_count, read, line);
+		// printf("read line %d words %d bytes %zu: %s", line_count, word_count, read, line);
 		line_count ++;
 		byte_count += read;
 		
 	}
 
-	printf("lines : %d words : %d bytes : %d\n", line_count, word_count, byte_count);
+	printf("\t%d \t%d \t%d\n", line_count, word_count, byte_count);
 
 	fclose(fp);
 	if (line)

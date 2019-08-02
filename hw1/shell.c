@@ -15,6 +15,9 @@
 /* Convenience macro to silence compiler warnings about unused function parameters. */
 #define unused __attribute__((unused))
 
+/* max size of path */
+#define PATH_MAX 255
+
 /* Whether the shell is connected to an actual terminal or not. */
 bool shell_is_interactive;
 
@@ -27,8 +30,15 @@ struct termios shell_tmodes;
 /* Process group id for the shell */
 pid_t shell_pgid;
 
+// self define variables
+
+/* path */
+char pwd[PATH_MAX];
+
 int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
+int cmd_pwd(struct tokens *tokens);
+int cmd_cd(struct tokens *tokens);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
@@ -43,6 +53,8 @@ typedef struct fun_desc {
 fun_desc_t cmd_table[] = {
   {cmd_help, "?", "show this help menu"},
   {cmd_exit, "exit", "exit the command shell"},
+  {cmd_pwd, "pwd", "get current dirctory path"},
+  {cmd_cd, "cd", "change current dirctory path"},
 };
 
 /* Prints a helpful description for the given command */
@@ -89,6 +101,31 @@ void init_shell() {
     /* Save the current termios to a variable, so it can be restored later. */
     tcgetattr(shell_terminal, &shell_tmodes);
   }
+}
+
+int cmd_pwd(unused struct tokens *tokens) {
+	if (getcwd(pwd, PATH_MAX) < 0) {
+		fprintf(stderr, "can not get current dirctory\n");
+		return -1;
+	} else {
+		printf("%s\n", pwd);
+	}
+	
+	return 1;
+}
+
+int cmd_cd(unused struct tokens *tokens) {
+	getcwd(pwd, PATH_MAX);
+	char *old_dir = getcwd(pwd, PATH_MAX);
+	char *new_dir = tokens_get_token(tokens, 1);
+	char *slash = "/";
+	strcat(old_dir, slash);
+	char *new_path = strcat(old_dir, new_dir);
+	
+	if (chdir(new_path) < 0) 
+		fprintf(stderr, "wrong path : %s\n", new_path);
+	
+	return 1;
 }
 
 int main(unused int argc, unused char *argv[]) {
