@@ -44,7 +44,7 @@ int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
 int cmd_cd(struct tokens *tokens);
-void pathcat(char *input, char *old, char *new);
+char * pathcat(char *input, char *old);
 int eval(struct tokens *tokens);
 void tokenize_path(char* env_path, char** path);
 
@@ -134,33 +134,38 @@ int cmd_cd(unused struct tokens *tokens) {
 	getcwd(pwd, PATH_MAX);
 	char *curr_path = getcwd(pwd, PATH_MAX);
 	char *input = tokens_get_token(tokens, 1);
-	char new_path[PATH_MAX];
 
-	pathcat(input, curr_path, new_path);
-	printf("cd path : %s\n", curr_path);
+	char *run_path = pathcat(input, curr_path);
+
+	// printf("cd path : %s\n", curr_path);
 	
-	if (chdir(new_path) < 0) 
-		fprintf(stderr, "wrong path : %s\n", new_path);
+	if (chdir(run_path) < 0) 
+		fprintf(stderr, "wrong path : %s\n", run_path);
 	
 	return 1;
 }
 
 /* if new paht star with '/', direct use it, else add input to current path*/
-void pathcat(char *input, char *old, char *new) {
-	printf("Concatent %s & %s to ", input, old);
+char * pathcat(char *input, char *curr) {
+	// printf("Concatent %s & %s to ", input, curr);
 	char *slash = "/";
+	char *path = "";
+	char buff[255];
+
+	strcpy(buff, curr);
 	if(input[0] != '/') {
-		strcat(old, slash);
-		new = strcat(old, input);
+		strcat(buff, slash);
+		path = strcat(buff, input);
 	} else {
-		new = input;
+		path = input;
 	}
-	printf("%s \n", new);
+	// printf("%s \n", path);
+	return path;
 }
 
 int eval(unused struct tokens *tokens) {
 	pid_t pid;
-	int status, i = 1;
+	int status, i = 0;
 	char *argv[ARG_MAX], *s;
 
 	while ((s = tokens_get_token(tokens, i))) {
@@ -172,18 +177,19 @@ int eval(unused struct tokens *tokens) {
 
 	char *inputLine = tokens_get_token(tokens, 0);
 
+	env_paths[0] = getcwd(pwd, PATH_MAX);
 	if ((pid = fork()) == 0) {
-		// while (env_paths) {
-		// 	char *runPath = "";
-		// 	pathcat(inputLine, *env_paths, runPath);
+		for (i = 0; env_paths[i] != NULL; i++) {
+			char *run_path = "";
+			run_path = pathcat(inputLine, env_paths[i]);
+			if (execve(run_path, argv, environ) > 0)
+			// fprintf(stderr, "Can not find execute file.\n");
+				exit(0);
 
-
-		// 	env_paths ++;
-		// }
-		if (execve(inputLine, argv, environ) < 0) {
-			fprintf(stderr, "Can not find execute file.\n");
-			exit(0);
 		}
+		fprintf(stderr, "Can not find execute file.\n");
+		exit(0);
+		
 	}
 
 	if (waitpid(pid, &status, 0) < 0) {
