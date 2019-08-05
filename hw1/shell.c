@@ -18,6 +18,9 @@
 /* max size of path */
 #define PATH_MAX 255
 
+/* max size of arguments */
+#define ARG_MAX 128
+
 /* Whether the shell is connected to an actual terminal or not. */
 bool shell_is_interactive;
 
@@ -35,10 +38,15 @@ pid_t shell_pgid;
 /* path */
 char pwd[PATH_MAX];
 
+extern char **environ;
+
 int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
 int cmd_cd(struct tokens *tokens);
+void pathcat(char *input, char *old, char *new);
+int eval(struct tokens *tokens);
+void tokenize_path(char* env_path, char** path);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens *tokens);
@@ -56,6 +64,8 @@ fun_desc_t cmd_table[] = {
   {cmd_pwd, "pwd", "get current dirctory path"},
   {cmd_cd, "cd", "change current dirctory path"},
 };
+
+char *env_paths[ARG_MAX];
 
 /* Prints a helpful description for the given command */
 int cmd_help(unused struct tokens *tokens) {
@@ -101,6 +111,12 @@ void init_shell() {
     /* Save the current termios to a variable, so it can be restored later. */
     tcgetattr(shell_terminal, &shell_tmodes);
   }
+
+  /* initial env_path array*/
+  // for (int i = 0; environ[i]; i++) {
+  //   printf("envs %d : %s\n", i, environ[i]);
+  // }
+  tokenize_path(environ[9], env_paths);
 }
 
 int cmd_pwd(unused struct tokens *tokens) {
@@ -116,16 +132,95 @@ int cmd_pwd(unused struct tokens *tokens) {
 
 int cmd_cd(unused struct tokens *tokens) {
 	getcwd(pwd, PATH_MAX);
-	char *old_dir = getcwd(pwd, PATH_MAX);
-	char *new_dir = tokens_get_token(tokens, 1);
-	char *slash = "/";
-	strcat(old_dir, slash);
-	char *new_path = strcat(old_dir, new_dir);
+	char *curr_path = getcwd(pwd, PATH_MAX);
+	char *input = tokens_get_token(tokens, 1);
+	char new_path[PATH_MAX];
+
+	pathcat(input, curr_path, new_path);
+	printf("cd path : %s\n", curr_path);
 	
 	if (chdir(new_path) < 0) 
 		fprintf(stderr, "wrong path : %s\n", new_path);
 	
 	return 1;
+}
+
+/* if new paht star with '/', direct use it, else add input to current path*/
+void pathcat(char *input, char *old, char *new) {
+	printf("Concatent %s & %s to ", input, old);
+	char *slash = "/";
+	if(input[0] != '/') {
+		strcat(old, slash);
+		new = strcat(old, input);
+	} else {
+		new = input;
+	}
+	printf("%s \n", new);
+}
+
+int eval(unused struct tokens *tokens) {
+	pid_t pid;
+	int status, i = 1;
+	char *argv[ARG_MAX], *s;
+
+	while ((s = tokens_get_token(tokens, i))) {
+		// printf("atgv %d: %s\n", i, s);
+		argv[i] = s;
+		i ++;
+	}
+	argv[i] = NULL;
+
+	char *inputLine = tokens_get_token(tokens, 0);
+
+	if ((pid = fork()) == 0) {
+		// while (env_paths) {
+		// 	char *runPath = "";
+		// 	pathcat(inputLine, *env_paths, runPath);
+
+
+		// 	env_paths ++;
+		// }
+		if (execve(inputLine, argv, environ) < 0) {
+			fprintf(stderr, "Can not find execute file.\n");
+			exit(0);
+		}
+	}
+
+	if (waitpid(pid, &status, 0) < 0) {
+		fprintf(stderr, "waitpid error");
+	}
+
+	return 1;
+}
+
+void tokenize_path(char* env_path, char** paths) {
+	char *delim;
+	int argc;
+
+	env_path[strlen(env_path) - 1] = ' ';
+
+	while (*env_path && (*env_path != '=')) {
+		env_path ++;
+	}
+	env_path ++; // move after '='
+
+	argc = 1;
+	paths[0] = getcwd(pwd, PATH_MAX);
+	printf("\tPATH 0 : %s\n", paths[0]);
+    while ((delim = strchr(env_path, ':'))) {
+		paths[argc++] = env_path;
+		*delim = '\0';
+		env_path = delim + 1;
+		printf("\tPath %d : %s\n", argc, paths[argc-1]);
+    }
+    // if only segment of PATH no ':'
+    if (delim == NULL) {
+    	paths[argc++] = env_path;
+    	printf("\tPath 0 : %s\n", paths[argc-1]);
+    }
+    paths[argc] = NULL;
+
+	
 }
 
 int main(unused int argc, unused char *argv[]) {
@@ -149,7 +244,7 @@ int main(unused int argc, unused char *argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      eval(tokens);
     }
 
     if (shell_is_interactive)
