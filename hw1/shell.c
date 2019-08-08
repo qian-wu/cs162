@@ -9,6 +9,8 @@
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "tokenizer.h"
 
@@ -44,7 +46,7 @@ int cmd_exit(struct tokens *tokens);
 int cmd_help(struct tokens *tokens);
 int cmd_pwd(struct tokens *tokens);
 int cmd_cd(struct tokens *tokens);
-char * pathcat(char *input, char *old);
+int pathcat(char *input, char *old, char *run_path);
 int eval(struct tokens *tokens);
 void tokenize_path(char* env_path, char** path);
 
@@ -131,13 +133,14 @@ int cmd_pwd(unused struct tokens *tokens) {
 }
 
 int cmd_cd(unused struct tokens *tokens) {
-	getcwd(pwd, PATH_MAX);
+	// getcwd(pwd, PATH_MAX);
 	char *curr_path = getcwd(pwd, PATH_MAX);
 	char *input = tokens_get_token(tokens, 1);
+	char run_path[PATH_MAX];
 
-	char *run_path = pathcat(input, curr_path);
+	pathcat(input, curr_path, run_path);
 
-	// printf("cd path : %s\n", curr_path);
+	printf("cd path : %s\n", run_path);
 	
 	if (chdir(run_path) < 0) 
 		fprintf(stderr, "wrong path : %s\n", run_path);
@@ -146,42 +149,68 @@ int cmd_cd(unused struct tokens *tokens) {
 }
 
 /* if new paht star with '/', direct use it, else add input to current path*/
-char * pathcat(char *input, char *curr) {
-	// printf("Concatent %s & %s to ", input, curr);
+int pathcat(char *input, char *curr, char *run_path) {
+	printf("Concatent %s & %s to ", input, curr);
 	char *slash = "/";
-	char *path = "";
+	// char *path = "";
 	char buff[255];
 
 	strcpy(buff, curr);
 	if(input[0] != '/') {
 		strcat(buff, slash);
-		path = strcat(buff, input);
+		strcpy(run_path, strcat(buff, input));
 	} else {
-		path = input;
+		strcpy(run_path, input);
 	}
-	// printf("%s \n", path);
-	return path;
+	printf("%s \n", run_path);
+	return 1;
 }
 
 int eval(unused struct tokens *tokens) {
 	pid_t pid;
-	int status, i = 0;
+	int status, i = 0, redirect = 0; // 1 redirect in ; 2 redirect out
+	char dir_file[PATH_MAX];
 	char *argv[ARG_MAX], *s;
+	char *curr_path = getcwd(pwd, PATH_MAX);
 
+	// get arguments fromm tokens
 	while ((s = tokens_get_token(tokens, i))) {
 		// printf("atgv %d: %s\n", i, s);
+		if (strcmp(s, "<") == 0) {
+			redirect = 1;
+			break;
+		}
+		if (strcmp(s, ">") == 0) {
+			redirect = 2;
+			break;
+		}
 		argv[i] = s;
 		i ++;
 	}
-	argv[i] = NULL;
+	argv[i] = NULL; // now i is length of argv
+	
+	// get redirect file 
+	if (redirect) {
+		char *tmp = tokens_get_token(tokens, i+1);
+		pathcat(tmp, curr_path, dir_file);
+		printf("Redirect file : %s \n", dir_file);
+	char test[] = "Linux Programmer!\n";
+	int fd =open(dir_file, O_RDWR|O_CREAT);
+	int size = write(fd, test, sizeof(test));
+	printf("write size : %d \n", size);
+	close(fd);
+
+	} 
+	
 
 	char *inputLine = tokens_get_token(tokens, 0);
 
 	env_paths[0] = getcwd(pwd, PATH_MAX);
 	if ((pid = fork()) == 0) {
 		for (i = 0; env_paths[i] != NULL; i++) {
-			char *run_path = "";
-			run_path = pathcat(inputLine, env_paths[i]);
+			char run_path[PATH_MAX];
+			pathcat(inputLine, env_paths[i], run_path);
+			printf("test path : %s \n", run_path);
 			if (execve(run_path, argv, environ) > 0)
 			// fprintf(stderr, "Can not find execute file.\n");
 				exit(0);
